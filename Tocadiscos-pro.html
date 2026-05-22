@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Tocadiscos Pro</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #1a1a1a; color: white; font-family: sans-serif; padding: 30px; }
+        
+        .header-collection { display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; }
+        .album-card { width: 140px; cursor: pointer; border: 4px solid transparent; border-radius: 10px; overflow: hidden; transition: transform 0.2s; }
+        .album-card:hover { transform: scale(1.05); }
+        .album-card img { width: 100%; display: block; }
+        .album-card.active { border-color: #f39c12; }
+
+        .main-container { display: flex; gap: 50px; justify-content: center; align-items: flex-start; }
+
+        /* Bigger Playlist/Song Selection */
+        .playlist { width: 450px; height: 550px; overflow-y: auto; background: #111; padding: 25px; border-radius: 12px; font-size: 18px; box-shadow: 0 8px 16px rgba(0,0,0,0.5); }
+        .track { padding: 14px; cursor: pointer; border-bottom: 1px solid #222; transition: background 0.2s; }
+        .track:hover { background: #333; }
+        .track.playing { color: #f39c12; font-weight: bold; background: #222; border-radius: 6px; }
+
+        /* Bigger Turntable Base */
+        .turntable-base { width: 550px; height: 550px; background: #333; border-radius: 14px; position: relative; border: 12px solid #444; box-shadow: 0 12px 24px rgba(0,0,0,0.6); overflow: hidden; }
+        
+        /* Bigger Platter */
+        .platter { width: 480px; height: 480px; background: #111; border-radius: 50%; position: absolute; top: 23px; left: 23px; display: flex; justify-content: center; align-items: center; }
+        
+        /* Bigger Vinyl with Drop/Load Animation */
+        .vinyl { width: 450px; height: 450px; border-radius: 50%; background-size: cover; background-position: center; transition: transform 0.3s; }
+        
+        /* Drop Animation trigger class */
+        .vinyl.loading { animation: loadDisc 0.6s ease-out forwards; }
+        
+        /* Combined Spinning and Constant Scale after drop */
+        .vinyl.spinning { animation: spin 2.5s linear infinite; }
+        
+        @keyframes loadDisc {
+            0% { transform: scale(1.3); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        /* Bigger Tonearm with Smooth Delay Animation */
+        .tonearm { width: 14px; height: 260px; background: #ccc; position: absolute; top: 15px; right: 60px; transform-origin: 50% 15px; transform: rotate(-35deg); transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); z-index: 10; }
+        .tonearm.playing { transform: rotate(15deg); }
+        .tonearm::after { content: ''; position: absolute; bottom: 0; width: 26px; height: 45px; background: #000; left: -6px; border-radius: 2px; }
+
+        /* Bigger Controls */
+        .controls { margin-top: 30px; display: flex; gap: 15px; justify-content: center; }
+        button { padding: 16px 30px; cursor: pointer; background: #f39c12; border: none; color: white; font-weight: bold; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.2s; }
+        button:hover { background: #e67e22; }
+    </style>
+</head>
+<body>
+
+<div class="header-collection" id="albumGrid"></div>
+
+<div class="main-container">
+    <div class="playlist" id="playlist"></div>
+
+    <div class="center-stage">
+        <div class="turntable-base">
+            <div class="tonearm" id="tonearm"></div>
+            <div class="platter">
+                <div class="vinyl" id="vinyl"></div>
+            </div>
+        </div>
+        <div class="controls">
+            <button onclick="prevTrack()">PREV</button>
+            <button onclick="togglePlay()">PLAY / PAUSE</button>
+            <button onclick="nextTrack()">NEXT</button>
+        </div>
+    </div>
+</div>
+
+<audio id="audio"></audio>
+
+<script>
+    const library = [
+        { artist: "Los Temerarios", vinylImg: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20(1998)%20-Fonovisa%20+PuroFlac/A.jpg", songs: [
+            { title: "Mi Vida Eres Tú", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/01.%20Mi%20Vida%20Eres%20T%C3%BA.mp3" },
+            { title: "La Mujer Que Soñé", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/02.%20La%20Mujer%20Que%20So%C3%B1%C3%A9.mp3" },
+            { title: "Tu Última Canción", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/03.%20T%C3%BA%20%C3%9Altima%20Canci%C3%B3n.mp3" },
+            { title: "Te Quiero", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/04.%20Te%20Quiero.mp3" },
+            { title: "Tu Infame Engaño", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/05.%20Tu%20Infame%20Enga%C3%B1o.mp3" },
+            { title: "Que Poca Suerte", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/06.%20Que%20Poca%20Suerte.mp3" },
+            { title: "Como Quisiera Volver", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/07.%20Como%20Quisiera%20Volver.mp3" },
+            { title: "Perdóname", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/08.%20Perd%C3%B3name.mp3" },
+            { title: "Como Tú", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/09.%20Como%20T%C3%BA.mp3" },
+            { title: "Pobre Tonto Enamorado", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/10.%20Pobre%20Tonto%20Enamorado.mp3" },
+            { title: "Solo Te Quiero a Ti", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/11.%20Solo%20Te%20Quiero a Ti.mp3" },
+            { title: "Extrañándote", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/12.%20Extra%C3%B1%C3%A1ndote.mp3" },
+            { title: "Eres Un Sueño", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/13.%20Eres%20Un%20Sue%C3%B1o.mp3" },
+            { title: "Mi Alma Reclama", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/14.%20Mi%20Alma%20Reclama.mp3" },
+            { title: "Mi Secreto", url: "https://archive.org/download/los-temerarios-15-exitos-para-siempre-1998-305/Los%20Temerarios%20-%2015%20Exitos%20Para%20Siempre%20%281998%29%20-Fonovisa%20%2BPuroFlac/15.%20Mi%20Secreto.mp3" }
+        ]},
+        { artist: "Los Bukis", vinylImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbqmepAMpQ8kq6yHobmZfdJkC6ziya93LAClN2_VLhsQ&s=10", songs: [
+            { title: "Quiéreme", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/01%20Qui%C3%A9reme.mp3" },
+            { title: "Viéndolo Bien", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/02%20Vi%E2%80%A2ndolo%20Bien.mp3" },
+            { title: "El Celoso", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/03%20El%20Celoso.mp3" },
+            { title: "Que le Vaya Bien", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/04%20Que%20le%20Vaya%20Bien.mp3" },
+            { title: "Buena Lección", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/05%20Buena%20Lecci%C3%B3n.mp3" },
+            { title: "Mi Mayor Necesidad", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/06%20Mi%20Mayor%20Necesidad.mp3" },
+            { title: "Porque Siempre Te Amaré", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/07%20Porque%20Siempre%20Te%20Amar%C3%A9.mp3" },
+            { title: "Dime Dónde y Cuándo", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/08%20Dime%20D%C3%B3nde%20y%20Cu%C3%A1ndo.mp3" },
+            { title: "Que Duro Es Llorar Así", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/09%20Que%20Duro%20Es%20Llorar%20As%C3%AD.mp3" },
+            { title: "Volveré", url: "https://archive.org/download/los-bukis-quiereme-1992/Los%20Bukis%20-%20Qui%C3%A9reme%20%281992%29%20%5BWAVE%5D%20-Fonovisa%20%2BMisael%20Canelo/10%20Volver%C3%A9.mp3" }
+        ]},
+        { artist: "Chalino Sanchez", vinylImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSFb5qlqcaiAV9bQg6lXCMwzTTjEUzzLdYLr5KPHMBSaw&s=10", songs: [
+            { title: "Alma Enamorada", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Alma%20Enamorada.mp3" },
+            { title: "Anastasio Pacheco", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Anastasio%20Pacheco.mp3" },
+            { title: "Armando Aguirre", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Armando%20Aguirre.mp3" },
+            { title: "Arriba La Noria", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Arriba%20La%20Noria.mp3" },
+            { title: "Baraja de Oro", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Baraja%20de%20Oro.mp3" },
+            { title: "Carta De Luto", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Carta%20De%20Luto.mp3" },
+            { title: "Coquio Castro", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Coquio%20Castro.mp3" },
+            { title: "Corazoncito Tirano", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Corazoncito%20Tirano.mp3" },
+            { title: "Cuatro Espadas", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Cuatro%20Espadas.mp3" },
+            { title: "El Coyonqueño", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20Coyonque%C3%B1o.mp3" },
+            { title: "El Crimen De Culiacán", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20Crimen%20De%20Culiac%C3%A1n.mp3" },
+            { title: "El Herrante", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20Herrante.mp3" },
+            { title: "El Navegante", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20Navegante.mp3" },
+            { title: "El Pávido Návido", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20P%C3%A1vido%20N%C3%A1vido.mp3" },
+            { title: "El Cuervo", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20El%20cuervo.mp3" },
+            { title: "Felipe Castro", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Felipe%20Castro.mp3" },
+            { title: "Flor Margarita", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Flor%20Margarita.mp3" },
+            { title: "Florita Del Alma", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Florita%20Del%20Alma.mp3" },
+            { title: "Hermosísimo Lucero", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Hermos%C3%ADsimo%20Lucero.mp3" },
+            { title: "Ignacio Parra", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Ignacio%20Parra.mp3" },
+            { title: "Juan Cantú", url: "https://archive.org/download/lo-mejor_20221217_2009/Chalino%20Sanchez%20-%20Lo%20Mejor/Chalino%20Sanchez%20-%20Juan%20Cant%C3%BA.mp3" }
+        ]},
+        { artist: "Industria del Amor", coverImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSjUZ8mIuybpuR7kSKcdTzk_8rsu9QYUIh7M-bieygM0A&s=10", vinylImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWn2acpKGBTsk2Q6Q8LrowCethJhwfJJnN3Qhy9nNZPA&s=10", songs: [
+            { title: "Si Lo Hubiera Sabido", url: "https://archive.org/download/07-siempre-te-amare/01%20-%20Si%20Lo%20Hubiera%20Sabido.mp3" },
+            { title: "Y Tú Con Él", url: "https://archive.org/download/07-siempre-te-amare/02%20-%20Y%20T%C3%BA%20Con%20%C3%89l.mp3" },
+            { title: "Ayúdame", url: "https://archive.org/download/07-siempre-te-amare/03%20-%20Ay%C3%BAdame.mp3" },
+            { title: "Sabor Al Caldo", url: "https://archive.org/download/07-siempre-te-amare/04%20-%20Sabor%20Al%20Caldo.mp3" },
+            { title: "Enséñame", url: "https://archive.org/download/07-siempre-te-amare/05%20-%20Ens%C3%A9%C3%B1ame.mp3" },
+            { title: "Enamorado De Tus Ojos", url: "https://archive.org/download/07-siempre-te-amare/06%20-%20Enamorado%20De%20Tus%20Ojos.mp3" },
+            { title: "Siempre Te Amaré", url: "https://archive.org/download/07-siempre-te-amare/07%20-%20Siempre%20Te%20Amar%C3%A9.mp3" },
+            { title: "Mi Chatita", url: "https://archive.org/download/07-siempre-te-amare/08%20-%20Mi%20Chatita.mp3" },
+            { title: "Te Sigo Esperando", url: "https://archive.org/download/07-siempre-te-amare/09%20-%20Te%20Sigo%20Esperando.mp3" },
+            { title: "Vuela, Vuela", url: "https://archive.org/download/07-siempre-te-amare/10%20-%20Vuela%2C%20Vuela.mp3" }
+        ]},
+        { artist: "Los Tigres del Norte", coverImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSXeW3BczpzQEXr_GQ3yoR1bLdqmWhfRTVzsdfeKXhiKA&s=10", vinylImg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT2ffDGjX7E0lQEQ74laL2jEPL-M5whLj26YfboU_gEPg&s=10", songs: [
+            { title: "La Mesa Del Rincón", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/01.%20La%20Mesa%20Del%20Rinc%C3%B3n.mp3" },
+            { title: "Ni Parientes Somos", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/02.%20Ni%20Parientes%20Somos.mp3" },
+            { title: "La Puerta Negra", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/03.%20La%20Puerta%20Negra.mp3" },
+            { title: "Golpes En El Corazón", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/04.%20Golpes%20En%20El%20Coraz%C3%B3n.mp3" },
+            { title: "Contrabando Y Traición", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/05.%20Contrabando%20Y%20Traici%C3%B3n.mp3" },
+            { title: "La Banda Del Carro Rojo", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/06.%20La%20Banda%20Del%20Carro%20Rojo.mp3" },
+            { title: "Tumba Falsa", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/07.%20Tumba%20Falsa.mp3" },
+            { title: "Jefe De Jefes", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/08.%20Jefe%20De%20Jefes.mp3" },
+            { title: "Mi Buena Suerte", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/09.%20Mi%20Buena%20Suerte.mp3" },
+            { title: "Carta Abierta", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/10.%20Carta%20Abierta.mp3" },
+            { title: "El Ejemplo", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/11.%20El%20Ejemplo.mp3" },
+            { title: "La Jaula De Oro", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/12.%20La%20Jaula%20De%20Oro.mp3" },
+            { title: "Rosita De Olivo", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/13.%20Rosita%20De%20Olivo.mp3" },
+            { title: "La Camioneta Gris", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/14.%20La%20Camioneta%20Gris.mp3" },
+            { title: "Pedro Y Pablo", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/15.%20Pedro%20Y%20Pablo.mp3" },
+            { title: "El Niño Y La Boda", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/16.%20El%20Ni%C3%B1o%20Y%20La%20Boda.mp3" },
+            { title: "El Avión De La Muerte", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/17.%20El%20Avi%C3%B3n%20De%20La%20Muerte.mp3" },
+            { title: "Pacas De A Kilo", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/18.%20Pacas%20De%20A%20Kilo.mp3" },
+            { title: "Si Me Vas A Dejar", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/19.%20Si%20Me%20Vas%20A%20Dejar.mp3" },
+            { title: "Cuestión Olvidada", url: "https://archive.org/download/los-tigres-del-norte-lo-mas-escuchado-500/Los%20Tigres%20del%20Norte%20-%20Lo%20M%C3%A1s%20Escuchado%20%28%29%20-EMI%20%2BGaston%20Poh/20.%20Cuesti%C3%B3n%20Olvidada.mp3" }
+        ]}
+    ];
+
+    const audio = document.getElementById('audio'), vinyl = document.getElementById('vinyl'), tonearm = document.getElementById('tonearm');
+    let currentAlbumIdx = 0, currentSongIdx = 0;
+    let animationTimeout = null;
+
+    function init() {
+        const grid = document.getElementById('albumGrid');
+        library.forEach((alb, i) => {
+            const card = document.createElement('div');
+            card.className = 'album-card';
+            const displayImg = alb.coverImg ? alb.coverImg : alb.vinylImg;
+            card.innerHTML = `<img src="${displayImg}">`;
+            card.onclick = () => { currentAlbumIdx = i; loadAlbum(); };
+            grid.appendChild(card);
+        });
+        loadAlbum();
+    }
+
+    function loadAlbum() {
+        // Reset State and stop active audio instantly during switch
+        audio.pause();
+        clearTimeout(animationTimeout);
+        vinyl.classList.remove('spinning', 'loading');
+        tonearm.classList.remove('playing');
+        
+        // Force Reflow to re-trigger CSS animations perfectly
+        void vinyl.offsetWidth; 
+
+        // Update Design Images & Selection Highlights
+        vinyl.style.backgroundImage = `url('${library[currentAlbumIdx].vinylImg}')`;
+        const pl = document.getElementById('playlist'); pl.innerHTML = '';
+        
+        library[currentAlbumIdx].songs.forEach((s, i) => {
+            const row = document.createElement('div'); row.className = 'track'; row.id = 't-' + i;
+            row.innerText = (i+1) + '. ' + s.title;
+            row.onclick = () => { currentSongIdx = i; triggerSequence(); };
+            pl.appendChild(row);
+        });
+        
+        const cards = document.querySelectorAll('.album-card');
+        cards.forEach((card, i) => {
+            if (i === currentAlbumIdx) { card.classList.add('active'); } 
+            else { card.classList.remove('active'); }
+        });
+
+        currentSongIdx = 0;
+        triggerSequence();
+    }
+
+    // Sequence: Load Disc animation -> Move Tonearm -> Play Sound and Spin Disc
+    function triggerSequence() {
+        audio.pause();
+        clearTimeout(animationTimeout);
+        
+        // Step 1: Remove running states and run Disc drop animation
+        vinyl.classList.remove('spinning', 'running');
+        tonearm.classList.remove('playing');
+        vinyl.classList.add('loading');
+        
+        document.querySelectorAll('.track').forEach(t => t.classList.remove('playing'));
+        const trackEl = document.getElementById('t-' + currentSongIdx);
+        if (trackEl) trackEl.classList.add('playing');
+
+        // Step 2: Once the disc drops (600ms), swing the needle onto the track
+        animationTimeout = setTimeout(() => {
+            tonearm.classList.add('playing');
+            
+            // Step 3: Once the needle hits the disc track (800ms travel time), fire audio & start spin
+            animationTimeout = setTimeout(() => {
+                audio.src = library[currentAlbumIdx].songs[currentSongIdx].url;
+                audio.play().catch(e => console.log("Playback interrupted or requires user gesture configuration"));
+                vinyl.classList.add('spinning');
+            }, 800);
+            
+        }, 600);
+    }
+
+    function togglePlay() {
+        if(audio.paused) { 
+            audio.play(); 
+            vinyl.classList.add('spinning'); 
+            tonearm.classList.add('playing'); 
+        } else { 
+            audio.pause(); 
+            vinyl.classList.remove('spinning'); 
+            tonearm.classList.remove('playing'); 
+        }
+    }
+
+    function nextTrack() { 
+        if(currentSongIdx < library[currentAlbumIdx].songs.length - 1) { 
+            currentSongIdx++; 
+            triggerSequence(); 
+        } 
+    }
+    
+    function prevTrack() { 
+        if(currentSongIdx > 0) { 
+            currentSongIdx--; 
+            triggerSequence(); 
+        } 
+    }
+
+    audio.onended = nextTrack;
+    init();
+</script>
+</body>
+</html>
